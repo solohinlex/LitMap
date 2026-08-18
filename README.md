@@ -1,2 +1,47 @@
 # LitMap
-AI-powered assistant for writers: character tracking, chapter summaries, and plot analysis.
+
+Вопросы и сводки по литературным корпусам. Несколько проектов изолированы: у каждого свой список папок и свой индекс. Папки с текстами только читаются.
+
+## Установка
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+cp example.env .env   # затем подставьте свои URL и модели
+```
+
+Локальные эндпоинты (OpenAI-compatible `/v1`):
+
+- эмбеддинги: `http://127.0.0.1:11434/v1`
+- чат: `http://127.0.0.1:8500/v1`
+
+Рабочие значения — в `.env` (файл не коммитится). Схема ключей — в `example.env`.
+
+## Проекты
+
+Реестр: `~/.config/litmap/config.yaml`. Индекс: `~/.local/share/litmap/projects/<имя>/index.sqlite`.
+
+```bash
+litmap projects add severny \
+  --corpus ~/writing/severny/manuscript \
+  --corpus ~/writing/severny/wiki
+litmap projects list
+litmap -p severny index
+litmap -p severny ask "где Иван теряет кольцо?"
+litmap -p severny character Иван
+litmap -p severny chapter 4
+```
+
+Проект задаётся `-p` / `--project`, переменной `LITMAP_PROJECT` или текущей папкой, если она лежит внутри зарегистрированного корпуса.
+
+Тип файла берётся из YAML-frontmatter (`type: character`) или из сегмента пути (`characters/`, `chapters/`, `lore/`, `plotlines/`). Алиасы персонажа:
+
+```yaml
+---
+type: character
+name: Иван
+aliases:
+  - Ваня
+---
+```
