@@ -27,6 +27,45 @@ def test_infer_type_from_path(tmp_path: Path) -> None:
     assert infer_type(path) == "chapter"
 
 
+def test_default_work_and_chapter_type(tmp_path: Path) -> None:
+    root = tmp_path / "FoxTales"
+    book = root / "Лисьи сказки" / "chapter_01.md"
+    book.parent.mkdir(parents=True)
+    book.write_text("# Глава 1\nАлиса смотрится в зеркало.\n", encoding="utf-8")
+    witch = root / "Охота на ведьму" / "chapter_01.md"
+    witch.parent.mkdir(parents=True)
+    witch.write_text("# Глава 1\nАлександр ищет парковку.\n", encoding="utf-8")
+    extra = root / "Дополнительно" / "Концепты.md"
+    extra.parent.mkdir(parents=True)
+    extra.write_text("# Концепты\nШуликуны.\n", encoding="utf-8")
+    char = root / "characters" / "Андрей.md"
+    char.parent.mkdir()
+    char.write_text("---\ntype: character\nname: Андрей\n---\nОхотник.\n", encoding="utf-8")
+    lore = root / "lore" / "Север.md"
+    lore.parent.mkdir()
+    lore.write_text("---\ntype: lore\nname: Север\n---\nЗемли.\n", encoding="utf-8")
+
+    fox = parse_document(book, [root])
+    assert fox.doc_type == "chapter"
+    assert fox.work == "Лисьи сказки"
+
+    hunt = parse_document(witch, [root])
+    assert hunt.doc_type == "chapter"
+    assert hunt.work == "Охота на ведьму"
+
+    notes = parse_document(extra, [root])
+    assert notes.doc_type == "chapter"
+    assert notes.work == "Дополнительно"
+
+    person = parse_document(char, [root])
+    assert person.doc_type == "character"
+    assert person.work == ""
+
+    world = parse_document(lore, [root])
+    assert world.doc_type == "lore"
+    assert world.work == ""
+
+
 def test_chunk_by_headings() -> None:
     text = "# Один\n\nабзац один\n\n## Два\n\nабзац два\n"
     chunks = chunk_text(text, max_chars=80)

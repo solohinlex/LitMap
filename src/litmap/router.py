@@ -35,7 +35,7 @@ class Route:
 
 def route_question(project: Project, settings: Settings, question: str) -> Route:
     text = question.strip()
-    extra = {"subject": ""}
+    extra = {"subject": "", "work": ""}
 
     match = CHARACTER_RE.search(text)
     if match:
@@ -51,6 +51,7 @@ def route_question(project: Project, settings: Settings, question: str) -> Route
     if match:
         name = match.group(1).strip(" ?«»\"'")
         extra["subject"] = name
+        extra["work"] = ""
         return Route(
             prompt="chapter_summary",
             chunks=retrieve_by_title(project, name, "chapter"),
@@ -99,16 +100,17 @@ def answer_character(project: Project, settings: Settings, name: str) -> str:
     )
 
 
-def answer_chapter(project: Project, settings: Settings, name: str) -> str:
-    chunks = retrieve_by_title(project, name, "chapter")
-    question = f"Дай сводку по главе {name}"
+def answer_chapter(project: Project, settings: Settings, name: str, work: str | None = None) -> str:
+    chunks = retrieve_by_title(project, name, "chapter", work=work)
+    label = f"{work} / {name}" if work else name
+    question = f"Дай сводку по главе {label}"
     return synthesize(
         settings,
         "chapter_summary",
         question,
         chunks,
         project_name=project.name,
-        extra={"subject": name},
+        extra={"subject": name, "work": work or ""},
     )
 
 

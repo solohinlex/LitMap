@@ -134,14 +134,15 @@ def character_cmd(ctx: click.Context, name: str) -> None:
 
 @cli.command("chapter")
 @click.argument("name")
+@click.option("--work", default=None, help="Имя рукописи — верхняя папка, например «Лисьи сказки».")
 @click.pass_context
-def chapter_cmd(ctx: click.Context, name: str) -> None:
-    """Сводка по главе."""
+def chapter_cmd(ctx: click.Context, name: str, work: str | None) -> None:
+    """Сводка по главе. Без --work ищется во всех рукописях проекта."""
     project_name = _resolve(ctx)
     try:
         settings = load_settings()
         project = get_project(project_name)
-        click.echo(answer_chapter(project, settings, name))
+        click.echo(answer_chapter(project, settings, name, work=work))
     except LitMapError as exc:
         _fail(str(exc))
 

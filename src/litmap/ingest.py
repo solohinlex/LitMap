@@ -10,6 +10,15 @@ TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*\n?", re.DOTALL)
 HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)\s*$", re.MULTILINE)
 DEFAULT_MAX_CHARS = 1500
+SPECIAL_FOLDERS = {
+    "characters": "character",
+    "character": "character",
+    "lore": "lore",
+    "chapters": "chapter",
+    "chapter": "chapter",
+    "plotlines": "plotline",
+    "plotline": "plotline",
+}
 
 
 @dataclass
@@ -19,6 +28,7 @@ class Document:
     title: str
     text: str
     mtime: float
+    work: str = ""
     aliases: list[str] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
 
@@ -31,19 +41,41 @@ class Chunk:
     text: str
     doc_type: str
     title: str
+    work: str = ""
+
+
+def relative_to_corpus(path: Path, corpus_roots: list[Path] | None = None) -> Path:
+    resolved = path.resolve()
+    for root in corpus_roots or []:
+        try:
+            return resolved.relative_to(root.resolve())
+        except ValueError:
+            continue
+    if len(resolved.parts) >= 2:
+        return Path(*resolved.parts[-2:])
+    return Path(resolved.name)
+
+
+def infer_type_and_work(path: Path, corpus_roots: list[Path] | None = None) -> tuple[str, str]:
+    """Special folders keep their type; any other top-level folder is a work of chapters."""
+    relative = relative_to_corpus(path, corpus_roots)
+    directories = list(relative.parts[:-1])
+    doc_type = "chapter"
+    for part in directories:
+        mapped = SPECIAL_FOLDERS.get(part.lower())
+        if mapped:
+            doc_type = mapped
+            break
+    work = ""
+    if directories:
+        first = directories[0]
+        if first.lower() not in SPECIAL_FOLDERS:
+            work = first
+    return doc_type, work
 
 
 def infer_type(path: Path, corpus_roots: list[Path] | None = None) -> str:
-    parts = {part.lower() for part in path.parts}
-    if "characters" in parts or "character" in parts:
-        return "character"
-    if "chapters" in parts or "chapter" in parts:
-        return "chapter"
-    if "plotlines" in parts or "plotline" in parts:
-        return "plotline"
-    if "lore" in parts:
-        return "lore"
-    return "prose"
+    return infer_type_and_work(path, corpus_roots)[0]
 
 
 def parse_frontmatter(raw: str) -> tuple[dict, str]:
@@ -69,7 +101,9 @@ def _as_alias_list(value: object) -> list[str]:
 def parse_document(path: Path, corpus_roots: list[Path] | None = None) -> Document:
     raw = path.read_text(encoding="utf-8")
     meta, body = parse_frontmatter(raw)
-    doc_type = str(meta.get("type") or infer_type(path, corpus_roots))
+    inferred_type, inferred_work = infer_type_and_work(path, corpus_roots)
+    doc_type = str(meta.get("type") or inferred_type)
+    work = str(meta.get("work") or inferred_work)
     title = str(meta.get("name") or meta.get("title") or path.stem)
     aliases = _as_alias_list(meta.get("aliases"))
     if title not in aliases:
@@ -77,12 +111,15 @@ def parse_document(path: Path, corpus_roots: list[Path] | None = None) -> Docume
     stem = path.stem
     if stem not in aliases:
         aliases.append(stem)
+    if work and work not in aliases:
+        aliases.append(work)
     return Document(
         path=path.resolve(),
         doc_type=doc_type,
         title=title,
         text=body.strip() + "\n",
         mtime=path.stat().st_mtime,
+        work=work,
         aliases=aliases,
         meta=meta,
     )
@@ -180,6 +217,7 @@ def documents_to_chunks(documents: list[Document], max_chars: int = DEFAULT_MAX_
                     text=text,
                     doc_type=doc.doc_type,
                     title=doc.title,
+                    work=doc.work,
                 )
             )
     return chunks

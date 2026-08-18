@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS documents (
     path TEXT PRIMARY KEY,
     doc_type TEXT NOT NULL,
     title TEXT NOT NULL,
+    work TEXT NOT NULL DEFAULT '',
     mtime REAL NOT NULL,
     text TEXT NOT NULL
 );
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS entities (
     alias TEXT NOT NULL,
     path TEXT NOT NULL,
     doc_type TEXT NOT NULL,
-    PRIMARY KEY (name, alias)
+    work TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (path, alias)
 );
 
 CREATE INDEX IF NOT EXISTS chunks_path_idx ON chunks(path);
@@ -78,21 +80,47 @@ def connect(project: Project) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    if "work" not in _columns(conn, "documents"):
+        conn.execute("ALTER TABLE documents ADD COLUMN work TEXT NOT NULL DEFAULT ''")
+    entity_cols = _columns(conn, "entities")
+    if "work" not in entity_cols:
+        conn.execute("DROP TABLE IF EXISTS entities")
+        conn.execute(
+            """
+            CREATE TABLE entities (
+                name TEXT NOT NULL,
+                alias TEXT NOT NULL,
+                path TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                work TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (path, alias)
+            )
+            """
+        )
 
 
 def _upsert_document(conn: sqlite3.Connection, doc: Document) -> None:
     conn.execute(
         """
-        INSERT INTO documents(path, doc_type, title, mtime, text)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO documents(path, doc_type, title, work, mtime, text)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             doc_type=excluded.doc_type,
             title=excluded.title,
+            work=excluded.work,
             mtime=excluded.mtime,
             text=excluded.text
         """,
-        (str(doc.path), doc.doc_type, doc.title, doc.mtime, doc.text),
+        (str(doc.path), doc.doc_type, doc.title, doc.work, doc.mtime, doc.text),
     )
 
 
@@ -116,10 +144,10 @@ def _rebuild_entities(conn: sqlite3.Connection, documents: list[Document]) -> No
         for alias in doc.aliases:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO entities(name, alias, path, doc_type)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO entities(name, alias, path, doc_type, work)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (doc.title, alias, str(doc.path), doc.doc_type),
+                (doc.title, alias, str(doc.path), doc.doc_type, doc.work),
             )
 
 
@@ -146,6 +174,8 @@ def index_project(
             previous = existing.get(str(doc.path))
             if previous is None or abs(previous - doc.mtime) > 1e-6:
                 changed.append(doc)
+            else:
+                _upsert_document(conn, doc)
 
         if progress:
             progress(f"файлов: {len(documents)}, к обновлению: {len(changed)}")
