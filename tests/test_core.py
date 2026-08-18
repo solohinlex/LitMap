@@ -29,10 +29,10 @@ def test_infer_type_from_path(tmp_path: Path) -> None:
 
 def test_default_work_and_chapter_type(tmp_path: Path) -> None:
     root = tmp_path / "FoxTales"
-    book = root / "Лисьи сказки" / "chapter_01.md"
+    book = root / "Лисьи сказки" / "01.md"
     book.parent.mkdir(parents=True)
     book.write_text("# Глава 1\nАлиса смотрится в зеркало.\n", encoding="utf-8")
-    witch = root / "Охота на ведьму" / "chapter_01.md"
+    witch = root / "Охота на ведьму" / "01.md"
     witch.parent.mkdir(parents=True)
     witch.write_text("# Глава 1\nАлександр ищет парковку.\n", encoding="utf-8")
     extra = root / "Дополнительно" / "Концепты.md"
