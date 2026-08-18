@@ -33,9 +33,9 @@ class Route:
     extra: dict[str, str]
 
 
-def route_question(project: Project, settings: Settings, question: str) -> Route:
+def route_question(project: Project, settings: Settings, question: str, work: str | None = None) -> Route:
     text = question.strip()
-    extra = {"subject": "", "work": ""}
+    extra = {"subject": "", "work": work or ""}
 
     match = CHARACTER_RE.search(text)
     if match:
@@ -51,10 +51,9 @@ def route_question(project: Project, settings: Settings, question: str) -> Route
     if match:
         name = match.group(1).strip(" ?«»\"'")
         extra["subject"] = name
-        extra["work"] = ""
         return Route(
             prompt="chapter_summary",
-            chunks=retrieve_by_title(project, name, "chapter"),
+            chunks=retrieve_by_title(project, name, "chapter", work=work),
             extra=extra,
         )
 
@@ -70,13 +69,13 @@ def route_question(project: Project, settings: Settings, question: str) -> Route
 
     return Route(
         prompt="ask",
-        chunks=retrieve_for_question(project, settings, text),
+        chunks=retrieve_for_question(project, settings, text, work=work),
         extra=extra,
     )
 
 
-def answer_question(project: Project, settings: Settings, question: str) -> str:
-    routed = route_question(project, settings, question)
+def answer_question(project: Project, settings: Settings, question: str, work: str | None = None) -> str:
+    routed = route_question(project, settings, question, work=work)
     return synthesize(
         settings,
         routed.prompt,

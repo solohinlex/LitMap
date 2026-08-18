@@ -62,21 +62,59 @@ def _chunk_from_row(
     )
 
 
+def work_matches(item_work: str, wanted: str | None) -> bool:
+    """True if chunk belongs to the requested manuscript or to shared universe files."""
+    if not wanted:
+        return True
+    if not item_work:
+        return True
+    left = item_work.casefold()
+    right = wanted.casefold()
+    return right in left or left in right
+
+
+def resolve_work_name(conn: sqlite3.Connection, work: str) -> str:
+    needle = work.strip()
+    if not needle:
+        return needle
+    folded = needle.casefold()
+    names = [row["work"] for row in conn.execute("SELECT DISTINCT work FROM documents WHERE work != ''")]
+    for name in names:
+        if name.casefold() == folded:
+            return name
+    for name in names:
+        if folded in name.casefold() or name.casefold() in folded:
+            return name
+    return needle
+
+
 def _document_map(conn: sqlite3.Connection) -> dict[str, sqlite3.Row]:
     return {row["path"]: row for row in conn.execute("SELECT path, doc_type, title, work FROM documents")}
 
 
-def search_vector(conn: sqlite3.Connection, query_vec: list[float], limit: int = 12) -> list[RetrievedChunk]:
+def search_vector(
+    conn: sqlite3.Connection,
+    query_vec: list[float],
+    limit: int = 12,
+    work: str | None = None,
+) -> list[RetrievedChunk]:
     docs = _document_map(conn)
     scored: list[RetrievedChunk] = []
     for row in conn.execute("SELECT path, heading, text, embedding FROM chunks"):
-        score = cosine(query_vec, load_vector(row["embedding"]))
-        scored.append(_chunk_from_row(row, docs, score))
+        chunk = _chunk_from_row(row, docs, cosine(query_vec, load_vector(row["embedding"])))
+        if not work_matches(chunk.work, work):
+            continue
+        scored.append(chunk)
     scored.sort(key=lambda item: item.score, reverse=True)
     return scored[:limit]
 
 
-def search_text(conn: sqlite3.Connection, needles: list[str], limit: int = 40) -> list[RetrievedChunk]:
+def search_text(
+    conn: sqlite3.Connection,
+    needles: list[str],
+    limit: int = 40,
+    work: str | None = None,
+) -> list[RetrievedChunk]:
     cleaned = [item.casefold() for item in needles if item and item.strip()]
     if not cleaned:
         return []
@@ -84,11 +122,15 @@ def search_text(conn: sqlite3.Connection, needles: list[str], limit: int = 40) -
     found: list[RetrievedChunk] = []
     for row in conn.execute("SELECT path, heading, text FROM chunks"):
         info = docs.get(row["path"])
+        chunk = _chunk_from_row(row, docs, 0.0)
+        if not work_matches(chunk.work, work):
+            continue
         haystack = f"{_doc_field(info, 'work')}\n{row['heading']}\n{row['text']}".casefold()
         hits = sum(1 for needle in cleaned if needle in haystack)
         if not hits:
             continue
-        found.append(_chunk_from_row(row, docs, float(hits)))
+        chunk.score = float(hits)
+        found.append(chunk)
     found.sort(key=lambda item: item.score, reverse=True)
     return found[:limit]
 
@@ -117,16 +159,20 @@ def retrieve_for_question(
     settings: Settings,
     question: str,
     extra_names: list[str] | None = None,
+    work: str | None = None,
 ) -> list[RetrievedChunk]:
     conn = connect(project)
     try:
+        wanted = resolve_work_name(conn, work) if work else None
         query_vec = embed_texts(settings, [question])[0]
-        vector_hits = search_vector(conn, query_vec, limit=12)
+        vector_hits = search_vector(conn, query_vec, limit=12, work=wanted)
         tokens = _query_tokens(question)
         names = list(extra_names or [])
         names.extend(_known_names_in_text(conn, question))
-        text_hits = search_text(conn, names + tokens, limit=20)
+        text_hits = search_text(conn, names + tokens, limit=20, work=wanted)
         merged = _merge_chunks(vector_hits, text_hits, limit=16)
+        if wanted:
+            return merged
         works = _works_in_text(conn, question)
         if not works:
             return merged

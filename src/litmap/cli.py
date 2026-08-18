@@ -29,12 +29,18 @@ def _resolve(ctx: click.Context) -> str:
         raise
 
 
+def _work(ctx: click.Context, explicit: str | None = None) -> str | None:
+    return explicit or (ctx.obj.get("work") if ctx.obj else None)
+
+
 @click.group()
 @click.option("-p", "--project", envvar="LITMAP_PROJECT", default=None, help="Имя проекта из реестра.")
+@click.option("--work", default=None, help="Ограничить рукописью (имя верхней папки).")
 @click.pass_context
-def cli(ctx: click.Context, project: str | None) -> None:
+def cli(ctx: click.Context, project: str | None, work: str | None) -> None:
     ctx.ensure_object(dict)
     ctx.obj["project"] = project
+    ctx.obj["work"] = work
 
 
 @cli.group("projects")
@@ -106,14 +112,15 @@ def index_cmd(ctx: click.Context) -> None:
 
 @cli.command("ask")
 @click.argument("question")
+@click.option("--work", default=None, help="Имя рукописи — верхняя папка, например «Лисьи сказки».")
 @click.pass_context
-def ask_cmd(ctx: click.Context, question: str) -> None:
-    """Свободный вопрос по выбранному проекту."""
+def ask_cmd(ctx: click.Context, question: str, work: str | None) -> None:
+    """Свободный вопрос по выбранному проекту или одной рукописи."""
     name = _resolve(ctx)
     try:
         settings = load_settings()
         project = get_project(name)
-        click.echo(answer_question(project, settings, question))
+        click.echo(answer_question(project, settings, question, work=_work(ctx, work)))
     except LitMapError as exc:
         _fail(str(exc))
 
@@ -142,7 +149,7 @@ def chapter_cmd(ctx: click.Context, name: str, work: str | None) -> None:
     try:
         settings = load_settings()
         project = get_project(project_name)
-        click.echo(answer_chapter(project, settings, name, work=work))
+        click.echo(answer_chapter(project, settings, name, work=_work(ctx, work)))
     except LitMapError as exc:
         _fail(str(exc))
 

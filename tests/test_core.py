@@ -5,6 +5,7 @@ from pathlib import Path
 from litmap.config import add_project, load_registry, project_from_cwd, resolve_project_name
 from litmap.ingest import chunk_text, infer_type, parse_document, parse_frontmatter
 from litmap.index import cosine
+from litmap.retrieve import work_matches
 
 
 def test_parse_frontmatter_and_aliases(tmp_path: Path) -> None:
@@ -83,6 +84,13 @@ def test_parse_frontmatter_absent() -> None:
 def test_cosine_identical() -> None:
     assert cosine([1.0, 0.0], [1.0, 0.0]) == 1.0
     assert cosine([1.0, 0.0], [0.0, 1.0]) == 0.0
+
+
+def test_work_matches_shared_and_other_books() -> None:
+    assert work_matches("Лисьи сказки", "Лисьи сказки")
+    assert work_matches("", "Лисьи сказки")
+    assert not work_matches("Охота на ведьму", "Лисьи сказки")
+    assert work_matches("Лисьи сказки", None)
 
 
 def test_project_registry_isolation(tmp_path: Path, monkeypatch) -> None:
