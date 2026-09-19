@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from litmap.config import Project, Settings
 from litmap.retrieve import (
     RetrievedChunk,
+    format_context,
     retrieve_by_title,
     retrieve_entity,
     retrieve_for_question,
@@ -124,3 +125,12 @@ def answer_plotline(project: Project, settings: Settings, name: str) -> str:
         project_name=project.name,
         extra={"subject": name},
     )
+
+
+def retrieve_context(project: Project, settings: Settings, question: str, work: str | None = None) -> str:
+    """Только извлечь релевантный контекст (чанки) по запросу, без вызова чат-модели."""
+    routed = route_question(project, settings, question, work=work)
+    context = format_context(routed.chunks)
+    if not context.strip():
+        return "В этом проекте не найдено фрагментов по запросу."
+    return context

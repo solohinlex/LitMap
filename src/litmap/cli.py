@@ -14,7 +14,13 @@ from litmap.config import (
     resolve_project_name,
 )
 from litmap.index import index_project
-from litmap.router import answer_chapter, answer_character, answer_plotline, answer_question
+from litmap.router import (
+    answer_chapter,
+    answer_character,
+    answer_plotline,
+    answer_question,
+    retrieve_context,
+)
 
 
 def _fail(message: str) -> None:
@@ -113,13 +119,17 @@ def index_cmd(ctx: click.Context) -> None:
 @cli.command("ask")
 @click.argument("question")
 @click.option("--work", default=None, help="Имя рукописи — верхняя папка, например «Лисьи сказки».")
+@click.option("--context", "context_only", is_flag=True, help="Только извлечь контекст (чанки) и вывести его, без вызова чат-модели.")
 @click.pass_context
-def ask_cmd(ctx: click.Context, question: str, work: str | None) -> None:
+def ask_cmd(ctx: click.Context, question: str, work: str | None, context_only: bool) -> None:
     """Свободный вопрос по выбранному проекту или одной рукописи."""
     name = _resolve(ctx)
     try:
         settings = load_settings()
         project = get_project(name)
+        if context_only:
+            click.echo(retrieve_context(project, settings, question, work=_work(ctx, work)))
+            return
         click.echo(answer_question(project, settings, question, work=_work(ctx, work)))
     except LitMapError as exc:
         _fail(str(exc))
